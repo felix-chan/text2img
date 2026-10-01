@@ -28,11 +28,23 @@
       box-shadow: 0 10px 25px rgba(0,0,0,0.15);
     }
 
+    /* 改用原生 <img> 標籤當作背景，解決 iOS 背景圖渲染失敗 */
+    #card-bg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 1;
+    }
+
     /* 半透明文字底色面板 */
     .text-panel {
+      position: relative;
+      z-index: 2; /* 確保在背景圖上方 */
       width: 80%;
       background: rgba(43, 43, 43, 0.85);
-      backdrop-filter: blur(10px);
       border-radius: 16px;
       padding: 16px;
       box-shadow: 0 4px 15px rgba(0,0,0,0.1);
@@ -72,14 +84,14 @@
 
   <h1>文字開心 share</h1>
 
-  <!-- 卡片預覽區（此區域會被導出成圖片） -->
   <div id="card">
+    <!-- 新增底層 <img> 標籤處理圖片 -->
+    <img id="card-bg" style="display: none;" />
     <div class="text-panel">
       <textarea placeholder="點擊此處輸入文字..."></textarea>
     </div>
   </div>
 
-  <!-- 按鈕區 -->
   <div class="controls">
     <button class="btn btn-upload" onclick="document.getElementById('imageInput').click()">選擇背景圖片</button>
     <input type="file" id="imageInput" accept="image/*" onchange="loadBackground(event)">
@@ -87,45 +99,57 @@
   </div>
 
   <script>
-    // 換背景圖邏輯
+    // 1. 換背景圖邏輯：改成設定 <img> 標籤的 src
     function loadBackground(event) {
       const file = event.target.files[0];
       if (file) {
         const reader = new FileReader();
         reader.onload = function(e) {
-          document.getElementById('card').style.backgroundImage = `url('${e.target.result}')`;
+          const imgNode = document.getElementById('card-bg');
+          imgNode.src = e.target.result;
+          imgNode.style.display = 'block';
         }
         reader.readAsDataURL(file);
       }
     }
 
-    // 生成圖片與分享邏輯
+    // 2. 針對 iOS 調整的圖片導出邏輯
     async function generateAndShare() {
       const cardNode = document.getElementById('card');
+      
       try {
-        // 將 HTML 卡片渲染為 PNG DataURL
-        const dataUrl = await htmlToImage.toPng(cardNode, { pixelRatio: 3 }); // 3倍高清渲染
-        
-        // 將 DataURL 轉為 File 物件以供原生分享
+        // 設定適用於 iOS WebKit 的轉換參數
+        const options = {
+          pixelRatio: 2,           // 2倍高清即可（降低 iOS 記憶體壓力）
+          cacheBust: true,          // 清除快取，防止 iOS 抓空圖
+          skipFonts: true,          // 避免 iOS 在載入系統字型時卡死圖片繪製
+          style: {
+            transform: 'scale(1)',  // 強制觸發重繪
+          }
+        };
+
+        // **iOS 關鍵修正**：呼叫兩次 toPng，第一次用於強迫 WebKit 完成圖片解碼與渲染預熱
+        await htmlToImage.toPng(cardNode, options);
+        const dataUrl = await htmlToImage.toPng(cardNode, options);
+
+        // 分享/下載圖片處理
         const res = await fetch(dataUrl);
         const blob = await res.blob();
         const file = new File([blob], 'card.png', { type: 'image/png' });
 
-        // 優先使用手機原生的 Web Share API
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
             title: '我的圖文卡片',
             files: [file]
           });
         } else {
-          // 如果瀏覽器不支援 Web Share API，改為彈出下載圖片
           const link = document.createElement('a');
           link.download = 'card.png';
           link.href = dataUrl;
           link.click();
         }
       } catch (error) {
-        alert('生成圖片失敗：' + error);
+        alert('生成圖片失敗，請再試一次：' + error);
       }
     }
   </script>
