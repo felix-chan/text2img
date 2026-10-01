@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文字開心 share</title>
+  <!-- 引入 html-to-image 套件，用於將網頁 HTML 轉為圖片 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: #f2f2f7; display: flex; flex-direction: column; align-items: center; padding: 20px; min-height: 100vh; }
+    h1 { font-size: 20px; margin-bottom: 20px; color: #1c1c1e; }
+
+    /* 卡片區域 */
+    #card {
+      width: 100%;
+      max-width: 380px;
+      height: 480px;
+      border-radius: 20px;
+      overflow: hidden;
+      position: relative;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background-size: cover;
+      background-position: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    }
+
+    /* 半透明文字底色面板 */
+    .text-panel {
+      width: 80%;
+      background: rgba(43, 43, 43, 0.85);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    .text-panel textarea {
+      width: 100%;
+      height: 150px;
+      border: none;
+      background: transparent;
+      resize: none;
+      font-size: 18px;
+      line-height: 1.5;
+      color: #d8d8db;
+      outline: none;
+    }
+
+    /* 控制按鈕區 */
+    .controls { width: 100%; max-width: 380px; margin-top: 24px; display: flex; flex-direction: column; gap: 12px; }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      color: white;
+      cursor: pointer;
+      text-align: center;
+    }
+    .btn-upload { background-color: #007aff; }
+    .btn-share { background-color: #34c759; }
+    #imageInput { display: none; }
+  </style>
+</head>
+<body>
+
+  <h1>文字開心 share</h1>
+
+  <!-- 卡片預覽區（此區域會被導出成圖片） -->
+  <div id="card">
+    <div class="text-panel">
+      <textarea placeholder="點擊此處輸入文字..."></textarea>
+    </div>
+  </div>
+
+  <!-- 按鈕區 -->
+  <div class="controls">
+    <button class="btn btn-upload" onclick="document.getElementById('imageInput').click()">選擇背景圖片</button>
+    <input type="file" id="imageInput" accept="image/*" onchange="loadBackground(event)">
+    <button class="btn btn-share" onclick="generateAndShare()">生成圖片並分享</button>
+  </div>
+
+  <script>
+    // 換背景圖邏輯
+    function loadBackground(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          document.getElementById('card').style.backgroundImage = `url('${e.target.result}')`;
+        }
+        reader.readAsDataURL(file);
+      }
+    }
+
+    // 生成圖片與分享邏輯
+    async function generateAndShare() {
+      const cardNode = document.getElementById('card');
+      try {
+        // 將 HTML 卡片渲染為 PNG DataURL
+        const dataUrl = await htmlToImage.toPng(cardNode, { pixelRatio: 3 }); // 3倍高清渲染
+        
+        // 將 DataURL 轉為 File 物件以供原生分享
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], 'card.png', { type: 'image/png' });
+
+        // 優先使用手機原生的 Web Share API
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: '我的圖文卡片',
+            files: [file]
+          });
+        } else {
+          // 如果瀏覽器不支援 Web Share API，改為彈出下載圖片
+          const link = document.createElement('a');
+          link.download = 'card.png';
+          link.href = dataUrl;
+          link.click();
+        }
+      } catch (error) {
+        alert('生成圖片失敗：' + error);
+      }
+    }
+  </script>
+</body>
+</html>
